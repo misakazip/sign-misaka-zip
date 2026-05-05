@@ -49,7 +49,6 @@
     const thin  = MachO.parseThin(bytes, 0, bytes.length);
     const parts = MachO.findKeyParts(thin);
     if (!parts.linkedit) throw new Error('thin Mach-O に __LINKEDIT が見つかりません');
-    if (!parts.codeSig)  throw new Error('thin Mach-O に LC_CODE_SIGNATURE が見つかりません (未署名バイナリ)');
 
     // ── 出力パラメータ ────────────────────────────
     const ident   = opts.identifier;
@@ -64,18 +63,49 @@
     const nSpecialSlots = (entDer ? 7 : 5);
 
     // ── 新シグネチャ配置先 ────────────────────────
-    const newSigOff = parts.codeSig.dataoff;  // 既存 LC_CODE_SIGNATURE の場所をそのまま再利用
+    let newSigOff;
+    let needAddLC = false;
+    if (parts.codeSig) {
+      newSigOff = parts.codeSig.dataoff;  // 既存 LC_CODE_SIGNATURE の場所をそのまま再利用
+    } else {
+      // 未署名バイナリ: __LINKEDIT 末尾の直後 (16-byte 整列) に新規署名を配置し、
+      // load commands に LC_CODE_SIGNATURE を 1 件追加する
+      const linkeditEnd = parts.linkedit.fileoff + parts.linkedit.filesize;
+      newSigOff = MachO.alignTo(Math.max(linkeditEnd, bytes.length), 16);
+      needAddLC = true;
+      U.info('LC_CODE_SIGNATURE が無いため新規追加します');
+      // load commands エリアに 16 byte の余裕があるか検証
+      const minSecOff = MachO.getMinSectionFileOff(thin);
+      const newLcEnd = thin.headerSize + thin.sizeofcmds + 16;
+      if (minSecOff !== Infinity && newLcEnd > minSecOff) {
+        throw new Error('load commands エリアに LC_CODE_SIGNATURE を追加する余地がありません ('
+                        + 'newLcEnd=' + newLcEnd + ', minSecOff=' + minSecOff + ')');
+      }
+    }
     const estSize   = estimateSigSize(opts, newSigOff, U.strToBytes(ident).length, U.strToBytes(teamId).length,
                                       hashSize, nSpecialSlots, entXml ? entXml.length : 0, entDer ? entDer.length : 0);
 
     // ── 新バッファ ────────────────────────────────
     const newLen = newSigOff + estSize;
     const out = new Uint8Array(newLen);
-    out.set(bytes.subarray(0, newSigOff));
+    // bytes.subarray(0, newSigOff) は newSigOff > bytes.length の場合に
+    // bytes.length までクランプされる (差分は Uint8Array の初期 0 で埋まる)
+    out.set(bytes.subarray(0, Math.min(bytes.length, newSigOff)));
 
-    // ── LC_CODE_SIGNATURE.size を更新 ─────────────
-    U.writeU32LE(out, parts.codeSig.lcOff + 8,  newSigOff);
-    U.writeU32LE(out, parts.codeSig.lcOff + 12, estSize);
+    // ── LC_CODE_SIGNATURE.size を更新 (or 新規追加) ─────────────
+    if (needAddLC) {
+      const newLcOff = thin.headerSize + thin.sizeofcmds;
+      U.writeU32LE(out, newLcOff,      MachO.LC_CODE_SIGNATURE);
+      U.writeU32LE(out, newLcOff + 4,  16);          // cmdsize
+      U.writeU32LE(out, newLcOff + 8,  newSigOff);   // dataoff
+      U.writeU32LE(out, newLcOff + 12, estSize);     // datasize
+      // ヘッダの ncmds / sizeofcmds を更新 (32bit/64bit いずれもオフセット 16, 20)
+      U.writeU32LE(out, 16, thin.ncmds + 1);
+      U.writeU32LE(out, 20, thin.sizeofcmds + 16);
+    } else {
+      U.writeU32LE(out, parts.codeSig.lcOff + 8,  newSigOff);
+      U.writeU32LE(out, parts.codeSig.lcOff + 12, estSize);
+    }
 
     // ── __LINKEDIT.filesize/vmsize を更新 ─────────
     const le = parts.linkedit;

@@ -210,13 +210,43 @@
   }
 
   /**
+   * thin Mach-O の全セグメント・全セクションを走査し、
+   * 最小の section.fileoff (>0) を返す。
+   * load commands エリアの末尾はこの値より手前でなければならない。
+   * セクションが無い場合 (dylinker/object 等) は Infinity を返す。
+   */
+  function getMinSectionFileOff(thin) {
+    let minOff = Infinity;
+    for (const lc of thin.loadCommands) {
+      const cmd = lc.cmd & ~LC_REQ_DYLD;
+      if (cmd === LC_SEGMENT_64) {
+        const nsects = U.readU32LE(thin.buf, lc.off + 64);
+        for (let i = 0; i < nsects; i++) {
+          const sOff = lc.off + 72 + i * 80;
+          const fileoff = U.readU32LE(thin.buf, sOff + 48);
+          if (fileoff > 0 && fileoff < minOff) minOff = fileoff;
+        }
+      } else if (cmd === LC_SEGMENT) {
+        const nsects = U.readU32LE(thin.buf, lc.off + 48);
+        for (let i = 0; i < nsects; i++) {
+          const sOff = lc.off + 56 + i * 68;
+          const fileoff = U.readU32LE(thin.buf, sOff + 40);
+          if (fileoff > 0 && fileoff < minOff) minOff = fileoff;
+        }
+      }
+    }
+    return minOff;
+  }
+
+  /**
    * 16-byte 境界に切り上げる
    */
   function align16(n) { return (n + 15) & ~15; }
   function alignTo(n, a) { return (n + a - 1) & ~(a - 1); }
 
   global.MachO = {
-    isMachO, parseTop, parseThin, findKeyParts, getExecSegInfo, readCStr, align16, alignTo,
+    isMachO, parseTop, parseThin, findKeyParts, getExecSegInfo, getMinSectionFileOff,
+    readCStr, align16, alignTo,
     LC_CODE_SIGNATURE, LC_SEGMENT, LC_SEGMENT_64,
     MH_EXECUTE, MH_DYLIB, MH_BUNDLE,
     FAT_MAGIC, FAT_MAGIC_64,
