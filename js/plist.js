@@ -12,6 +12,10 @@
 
   const U = global.U;
 
+  // ── DoS 対策上限 ─────────────────────────────────────────
+  const MAX_DEPTH = 256;       // ネスト深度
+  const MAX_OBJECTS = 1000000; // 1 plist あたりの総オブジェクト数
+
   // ============================================================
   //  XML plist パーサ
   // ============================================================
@@ -24,7 +28,8 @@
     if (root.tagName !== 'plist') throw new Error('plist: ルート要素が <plist> ではありません');
     const child = firstElement(root);
     if (!child) return null;
-    return parseElement(child);
+    const ctx = { count: 0 };
+    return parseElement(child, 0, ctx);
   }
 
   function firstElement(node) {
@@ -38,7 +43,9 @@
     return c;
   }
 
-  function parseElement(el) {
+  function parseElement(el, depth, ctx) {
+    if (depth > MAX_DEPTH) throw new Error('plist: ネストが深すぎます');
+    if (++ctx.count > MAX_OBJECTS) throw new Error('plist: オブジェクト数が多すぎます');
     switch (el.tagName) {
       case 'string':  return el.textContent;
       case 'integer': return parseInt(el.textContent, 10);
@@ -53,18 +60,23 @@
       case 'array': {
         const out = [];
         let c = firstElement(el);
-        while (c) { out.push(parseElement(c)); c = nextElement(c); }
+        while (c) { out.push(parseElement(c, depth + 1, ctx)); c = nextElement(c); }
         return out;
       }
       case 'dict': {
-        const out = {};
+        const out = Object.create(null); // prototype pollution 防止
         let c = firstElement(el);
         while (c) {
           if (c.tagName !== 'key') throw new Error('plist: dict 内に <key> 以外の要素');
           const key = c.textContent;
           const v = nextElement(c);
           if (!v) throw new Error('plist: <key> の値が無い: ' + key);
-          out[key] = parseElement(v);
+          if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+            // 危険キーはスキップ
+            c = nextElement(v);
+            continue;
+          }
+          out[key] = parseElement(v, depth + 1, ctx);
           c = nextElement(v);
         }
         return out;
@@ -160,17 +172,50 @@
     const topObject     = U.readU64BE(bytes, tOff + 16);
     const offsetTableOffset = U.readU64BE(bytes, tOff + 24);
 
+    if (offsetIntSize < 1 || offsetIntSize > 8) throw new Error('bplist: offsetIntSize 不正');
+    if (objectRefSize < 1 || objectRefSize > 8) throw new Error('bplist: objectRefSize 不正');
+    if (numObjects > MAX_OBJECTS) throw new Error('bplist: オブジェクト数が多すぎます');
+    if (topObject >= numObjects) throw new Error('bplist: topObject が範囲外');
+    if (offsetTableOffset + numObjects * offsetIntSize > tOff) {
+      throw new Error('bplist: offsetTable が trailer を超えています');
+    }
+
+    const visited = new Uint8Array(numObjects); // 循環参照検出
+    let depth = 0;
+
+    function ensureRange(off, len) {
+      if (off < 0 || len < 0 || off + len > tOff) {
+        throw new Error('bplist: 範囲外アクセス');
+      }
+    }
     function readSizedInt(off, size) {
+      ensureRange(off, size);
       let v = 0;
       for (let i = 0; i < size; i++) v = v * 256 + bytes[off + i];
       return v;
     }
     function objectOffset(idx) {
+      if (idx >= numObjects) throw new Error('bplist: object index 範囲外: ' + idx);
       return readSizedInt(offsetTableOffset + idx * offsetIntSize, offsetIntSize);
     }
 
     function readObject(idx) {
+      if (idx >= numObjects) throw new Error('bplist: object index 範囲外: ' + idx);
+      if (visited[idx]) throw new Error('bplist: 循環参照を検出');
+      if (depth > MAX_DEPTH) throw new Error('bplist: ネストが深すぎます');
+      visited[idx] = 1;
+      depth++;
+      try {
+        return readObjectInner(idx);
+      } finally {
+        depth--;
+        visited[idx] = 0;
+      }
+    }
+
+    function readObjectInner(idx) {
       const off = objectOffset(idx);
+      ensureRange(off, 1);
       const marker = bytes[off];
       const hi = (marker >> 4) & 0xf;
       const lo = marker & 0xf;
@@ -182,11 +227,13 @@
       // Int
       if (hi === 0x1) {
         const n = 1 << lo; // 1, 2, 4, 8, 16
+        if (n > 16) throw new Error('bplist: int size ' + n);
         return readSizedInt(off + 1, n);
       }
       // Real
       if (hi === 0x2) {
         const n = 1 << lo;
+        ensureRange(off + 1, n);
         const dv = new DataView(bytes.buffer, bytes.byteOffset + off + 1, n);
         if (n === 4) return dv.getFloat32(0, false);
         if (n === 8) return dv.getFloat64(0, false);
@@ -194,6 +241,7 @@
       }
       // Date
       if (marker === 0x33) {
+        ensureRange(off + 1, 8);
         const dv = new DataView(bytes.buffer, bytes.byteOffset + off + 1, 8);
         const sec = dv.getFloat64(0, false);
         // Apple epoch: 2001-01-01
@@ -202,11 +250,13 @@
       // Data
       if (hi === 0x4) {
         const [count, dataOff] = readCount(off, lo);
+        ensureRange(dataOff, count);
         return bytes.slice(dataOff, dataOff + count);
       }
       // ASCII string
       if (hi === 0x5) {
         const [count, dataOff] = readCount(off, lo);
+        ensureRange(dataOff, count);
         let s = '';
         for (let i = 0; i < count; i++) s += String.fromCharCode(bytes[dataOff + i]);
         return s;
@@ -214,6 +264,7 @@
       // UTF-16BE string
       if (hi === 0x6) {
         const [count, dataOff] = readCount(off, lo);
+        ensureRange(dataOff, count * 2);
         let s = '';
         for (let i = 0; i < count; i++) {
           s += String.fromCharCode((bytes[dataOff + i*2] << 8) | bytes[dataOff + i*2 + 1]);
@@ -228,6 +279,7 @@
       // Array
       if (hi === 0xa) {
         const [count, dataOff] = readCount(off, lo);
+        ensureRange(dataOff, count * objectRefSize);
         const out = [];
         for (let i = 0; i < count; i++) {
           const ref = readSizedInt(dataOff + i * objectRefSize, objectRefSize);
@@ -238,6 +290,7 @@
       // Set (treat as array)
       if (hi === 0xc) {
         const [count, dataOff] = readCount(off, lo);
+        ensureRange(dataOff, count * objectRefSize);
         const out = [];
         for (let i = 0; i < count; i++) {
           const ref = readSizedInt(dataOff + i * objectRefSize, objectRefSize);
@@ -248,13 +301,15 @@
       // Dict
       if (hi === 0xd) {
         const [count, dataOff] = readCount(off, lo);
-        const out = {};
+        ensureRange(dataOff, count * objectRefSize * 2);
+        const out = Object.create(null); // prototype pollution 防止
         for (let i = 0; i < count; i++) {
           const keyRef = readSizedInt(dataOff + i * objectRefSize, objectRefSize);
           const valRef = readSizedInt(dataOff + (count + i) * objectRefSize, objectRefSize);
-          const k = readObject(keyRef);
+          const k = String(readObject(keyRef));
           const v = readObject(valRef);
-          out[String(k)] = v;
+          if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+          out[k] = v;
         }
         return out;
       }
@@ -264,10 +319,13 @@
     function readCount(off, lo) {
       if (lo !== 0xf) return [lo, off + 1];
       // Extended count: next int marker
+      ensureRange(off + 1, 1);
       const m = bytes[off + 1];
       if (((m >> 4) & 0xf) !== 0x1) throw new Error('bplist: extended count not int');
       const n = 1 << (m & 0xf);
+      if (n > 16) throw new Error('bplist: extended count size ' + n);
       const count = readSizedInt(off + 2, n);
+      if (count < 0 || count > MAX_OBJECTS) throw new Error('bplist: count が大きすぎます');
       return [count, off + 2 + n];
     }
 

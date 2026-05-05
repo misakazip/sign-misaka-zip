@@ -8,6 +8,7 @@
     ipaFile: null,
     p12File: null,
     ppFile:  null,
+    lastBlobUrl: null,
   };
 
   // ── DOM ─────────────────────────────────────────────────
@@ -62,6 +63,10 @@
     btnRun.disabled = true;
     btnDl.hidden = true;
     btnDl.removeAttribute('href');
+    if (state.lastBlobUrl) {
+      URL.revokeObjectURL(state.lastBlobUrl);
+      state.lastBlobUrl = null;
+    }
     try {
       await runPipeline();
     } catch (e) {
@@ -176,6 +181,7 @@
 
     // ── ダウンロードリンク作成 ───────────────────
     const url = URL.createObjectURL(outBlob);
+    state.lastBlobUrl = url;
     const baseName = state.ipaFile.name.replace(/\.ipa$/i, '');
     btnDl.href = url;
     btnDl.download = U.sanitizeFilename(baseName + '_signed.ipa');

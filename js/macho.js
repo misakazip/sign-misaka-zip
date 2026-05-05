@@ -28,6 +28,11 @@
   const CPU_TYPE_X86    = 7;
   const CPU_TYPE_X86_64 = 0x01000007;
 
+  // ── DoS 対策上限 ─────────────────────────────────────────
+  const MAX_FAT_SLICES = 64;     // 現実的な FAT スライス数上限
+  const MAX_LOAD_CMDS  = 4096;   // 現実的な load command 数上限
+  const MAX_CMDS_SIZE  = 64 * 1024 * 1024; // sizeofcmds 上限 (64MB)
+
   const MH_EXECUTE  = 0x2;
   const MH_DYLIB    = 0x6;
   const MH_BUNDLE   = 0x8;
@@ -57,8 +62,14 @@
     if (mBE === FAT_MAGIC || mBE === FAT_MAGIC_64) {
       const fat64 = (mBE === FAT_MAGIC_64);
       const n = U.readU32BE(bytes, 4);
-      const slices = [];
+      if (n === 0 || n > MAX_FAT_SLICES) {
+        throw new Error('FAT スライス数が不正: ' + n);
+      }
       const archSize = fat64 ? 32 : 20;
+      if (8 + n * archSize > bytes.length) {
+        throw new Error('FAT ヘッダがファイル長を超えています');
+      }
+      const slices = [];
       for (let i = 0; i < n; i++) {
         const off = 8 + i * archSize;
         const cputype    = U.readU32BE(bytes, off);
@@ -72,6 +83,9 @@
           sliceOff  = U.readU32BE(bytes, off + 8);
           sliceSize = U.readU32BE(bytes, off + 12);
           align     = U.readU32BE(bytes, off + 16);
+        }
+        if (sliceOff + sliceSize > bytes.length) {
+          throw new Error('FAT スライスがファイル長を超えています');
         }
         slices.push({ cputype, cpusubtype, offset: sliceOff, size: sliceSize, align });
       }
@@ -93,6 +107,7 @@
    */
   function parseThin(bytes, sliceOff, sliceSize) {
     const buf = bytes.subarray(sliceOff, sliceOff + sliceSize);
+    if (buf.length < 28) throw new Error('thin Mach-O が短すぎます');
     const magic = U.readU32LE(buf, 0);
     let is64;
     if (magic === MH_MAGIC_64) is64 = true;
@@ -107,11 +122,22 @@
     const flags      = U.readU32LE(buf, 24);
     const headerSize = is64 ? 32 : 28;
 
+    if (ncmds > MAX_LOAD_CMDS) throw new Error('ncmds が大きすぎます: ' + ncmds);
+    if (sizeofcmds > MAX_CMDS_SIZE) throw new Error('sizeofcmds が大きすぎます: ' + sizeofcmds);
+    if (headerSize + sizeofcmds > buf.length) {
+      throw new Error('load commands がスライス長を超えています');
+    }
+
     const lcs = [];
     let off = headerSize;
+    const lcEnd = headerSize + sizeofcmds;
     for (let i = 0; i < ncmds; i++) {
+      if (off + 8 > lcEnd) throw new Error('load command がはみ出しました');
       const cmd     = U.readU32LE(buf, off);
       const cmdsize = U.readU32LE(buf, off + 4);
+      if (cmdsize < 8 || off + cmdsize > lcEnd) {
+        throw new Error('cmdsize が不正: ' + cmdsize);
+      }
       lcs.push({ cmd, cmdsize, off, _bytes: buf });
       off += cmdsize;
     }
