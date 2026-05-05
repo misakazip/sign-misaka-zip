@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>iOS IPA 署名ツール (Web)</title>
+<meta name="description" content="ブラウザ完結で動く iOS IPA 再署名ツール。証明書 (.p12) と Provisioning Profile を使って IPA を再署名します。">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1>iOS IPA 署名ツール <span class="badge">Web</span></h1>
+    <p class="lead">
+      ブラウザ内で完結する iOS IPA の再署名ツールです。
+      アップロードしたファイルはサーバーへ送信されず、すべての処理は端末上で実行されます。
+    </p>
+  </div>
+</header>
+
+<main class="container">
+
+  <section class="card">
+    <h2>1. ファイルを選択</h2>
+
+    <div class="grid">
+      <label class="filebox" for="ipa-input">
+        <span class="filebox-title">IPA ファイル</span>
+        <span class="filebox-hint">.ipa 形式</span>
+        <input type="file" id="ipa-input" accept=".ipa,application/octet-stream">
+        <span class="filebox-name" data-target="ipa-input">未選択</span>
+      </label>
+
+      <label class="filebox" for="p12-input">
+        <span class="filebox-title">証明書 (.p12 / .pfx)</span>
+        <span class="filebox-hint">秘密鍵を含む PKCS#12</span>
+        <input type="file" id="p12-input" accept=".p12,.pfx,application/x-pkcs12">
+        <span class="filebox-name" data-target="p12-input">未選択</span>
+      </label>
+
+      <label class="filebox" for="pp-input">
+        <span class="filebox-title">Provisioning Profile</span>
+        <span class="filebox-hint">.mobileprovision</span>
+        <input type="file" id="pp-input" accept=".mobileprovision,application/octet-stream">
+        <span class="filebox-name" data-target="pp-input">未選択</span>
+      </label>
+    </div>
+
+    <div class="row">
+      <label class="field">
+        <span>証明書パスワード</span>
+        <input type="password" id="p12-pass" placeholder="(なしの場合は空)" autocomplete="off">
+      </label>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>2. 操作を選択</h2>
+    <div class="checks">
+      <label><input type="checkbox" id="opt-show" checked> IPA 内容を表示する (署名前確認)</label>
+      <label><input type="checkbox" id="opt-pp" checked> Provisioning Profile を差し替える</label>
+      <label><input type="checkbox" id="opt-bid"> Bundle ID を変更する</label>
+      <label><input type="checkbox" id="opt-ent" checked> Entitlements を自動抽出して適用する</label>
+      <label><input type="checkbox" id="opt-sign" checked> 再署名する</label>
+    </div>
+    <div class="row" id="row-bid" hidden>
+      <label class="field">
+        <span>新しい Bundle ID</span>
+        <input type="text" id="new-bid" placeholder="com.example.app">
+      </label>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>3. 実行</h2>
+    <div class="actions">
+      <button id="btn-inspect" type="button" class="ghost">内容を確認</button>
+      <button id="btn-run" type="button" class="primary">処理を実行</button>
+      <a id="btn-download" class="primary download" hidden download>署名済み IPA をダウンロード</a>
+    </div>
+    <div class="progress" id="progress" hidden>
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+      <div class="progress-text" id="progress-text">準備中...</div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>ログ</h2>
+    <pre id="log" class="log" aria-live="polite"></pre>
+    <div class="row">
+      <button id="btn-clear-log" type="button" class="ghost small">ログをクリア</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>使い方とご注意</h2>
+    <ul class="notes">
+      <li>このツールはブラウザ内のみで動作します。アップロードしたファイル・証明書・パスワードは外部サーバーへ送信されません。</li>
+      <li>有効な Apple Developer 証明書 (Development / Distribution) と一致する Provisioning Profile が必要です。</li>
+      <li>再署名した IPA を実機にインストールするには、デバイスの UDID が Provisioning Profile に登録されている必要があります。</li>
+      <li>FairPlay DRM で保護された App Store アプリ (暗号化された Mach-O) は再署名できません。</li>
+      <li>大きな IPA ではメモリ消費とブラウザの応答遅延に注意してください。デスクトップ Chrome / Edge での実行を推奨します。</li>
+    </ul>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="container">
+    <p>
+      <a href="https://github.com/" target="_blank" rel="noopener">ソース</a> ·
+      クライアントサイドのみで動作 · No data leaves your browser
+    </p>
+  </div>
+</footer>
+
+<!-- 外部ライブラリ (CDN) -->
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/node-forge@1.3.1/dist/forge.min.js"></script>
+
+<!-- 自前モジュール -->
+<script src="js/utils.js"></script>
+<script src="js/plist.js"></script>
+<script src="js/provisioning.js"></script>
+<script src="js/bundle_id.js"></script>
+<script src="js/ipa_inspector.js"></script>
+<script src="js/macho.js"></script>
+<script src="js/codedirectory.js"></script>
+<script src="js/cms.js"></script>
+<script src="js/code_resources.js"></script>
+<script src="js/signer.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
