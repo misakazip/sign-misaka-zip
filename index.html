@@ -3,15 +3,21 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>iOS IPA 署名ツール (Web)</title>
-<meta name="description" content="ブラウザ完結で動く iOS IPA 再署名ツール。証明書 (.p12) と Provisioning Profile を使って IPA を再署名します。">
+<title data-i18n="meta.title">iOS App Signer</title>
+<meta name="description" data-i18n-attr="content:meta.description" content="ブラウザ完結で動く iOS IPA 再署名ツール。証明書 (.p12) と Provisioning Profile を使って IPA を(再)署名します。">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 <header class="site-header">
   <div class="container">
-    <h1>iOS IPA 署名ツール <span class="badge">Web</span></h1>
-    <p class="lead">
+    <div class="header-row">
+      <h1><span data-i18n="header.title">iOS App Signer</span><span class="badge" data-i18n="header.badge">Web</span></h1>
+      <div class="lang-switch" role="group" data-i18n-attr="aria-label:ui.langLabel" aria-label="言語">
+        <button type="button" class="lang-btn" data-lang-set="ja" data-i18n="ui.lang.ja">日本語</button>
+        <button type="button" class="lang-btn" data-lang-set="en" data-i18n="ui.lang.en">English</button>
+      </div>
+    </div>
+    <p class="lead" data-i18n="header.lead">
       ブラウザ内で完結する iOS IPA の再署名ツールです。
       アップロードしたファイルはサーバーへ送信されず、すべての処理は端末上で実行されます。
     </p>
@@ -21,85 +27,85 @@
 <main class="container">
 
   <section class="card">
-    <h2>1. ファイルを選択</h2>
+    <h2 data-i18n="step1.heading">1. ファイルを選択</h2>
 
     <div class="grid">
       <label class="filebox" for="ipa-input">
-        <span class="filebox-title">IPA ファイル</span>
-        <span class="filebox-hint">.ipa 形式</span>
+        <span class="filebox-title" data-i18n="step1.ipa.title">IPA ファイル</span>
+        <span class="filebox-hint" data-i18n="step1.ipa.hint">.ipa 形式</span>
         <input type="file" id="ipa-input" accept=".ipa,application/octet-stream">
-        <span class="filebox-name" data-target="ipa-input">未選択</span>
+        <span class="filebox-name" data-target="ipa-input" data-i18n="step1.notSelected">未選択</span>
       </label>
 
       <label class="filebox" for="p12-input">
-        <span class="filebox-title">証明書 (.p12 / .pfx)</span>
-        <span class="filebox-hint">秘密鍵を含む PKCS#12</span>
+        <span class="filebox-title" data-i18n="step1.p12.title">証明書 (.p12 / .pfx)</span>
+        <span class="filebox-hint" data-i18n="step1.p12.hint">秘密鍵を含む PKCS#12</span>
         <input type="file" id="p12-input" accept=".p12,.pfx,application/x-pkcs12">
-        <span class="filebox-name" data-target="p12-input">未選択</span>
+        <span class="filebox-name" data-target="p12-input" data-i18n="step1.notSelected">未選択</span>
       </label>
 
       <label class="filebox" for="pp-input">
-        <span class="filebox-title">Provisioning Profile</span>
-        <span class="filebox-hint">.mobileprovision</span>
+        <span class="filebox-title" data-i18n="step1.pp.title">Provisioning Profile</span>
+        <span class="filebox-hint" data-i18n="step1.pp.hint">.mobileprovision</span>
         <input type="file" id="pp-input" accept=".mobileprovision,application/octet-stream">
-        <span class="filebox-name" data-target="pp-input">未選択</span>
+        <span class="filebox-name" data-target="pp-input" data-i18n="step1.notSelected">未選択</span>
       </label>
     </div>
 
     <div class="row">
       <label class="field">
-        <span>証明書パスワード</span>
-        <input type="password" id="p12-pass" placeholder="(なしの場合は空)" autocomplete="off">
+        <span data-i18n="step1.passLabel">証明書パスワード</span>
+        <input type="password" id="p12-pass" data-i18n-attr="placeholder:step1.passPlaceholder" placeholder="(なしの場合は空)" autocomplete="off">
       </label>
     </div>
   </section>
 
   <section class="card">
-    <h2>2. 操作を選択</h2>
+    <h2 data-i18n="step2.heading">2. 操作を選択</h2>
     <div class="checks">
-      <label><input type="checkbox" id="opt-show" checked> IPA 内容を表示する (署名前確認)</label>
-      <label><input type="checkbox" id="opt-pp" checked> Provisioning Profile を差し替える</label>
-      <label><input type="checkbox" id="opt-bid"> Bundle ID を変更する</label>
-      <label><input type="checkbox" id="opt-ent" checked> Entitlements を自動抽出して適用する</label>
-      <label><input type="checkbox" id="opt-sign" checked> 再署名する</label>
+      <label><input type="checkbox" id="opt-show" checked> <span data-i18n="step2.optShow">IPA 内容を表示する (署名前確認)</span></label>
+      <label><input type="checkbox" id="opt-pp" checked> <span data-i18n="step2.optPP">Provisioning Profile を差し替える</span></label>
+      <label><input type="checkbox" id="opt-bid"> <span data-i18n="step2.optBid">Bundle ID を変更する</span></label>
+      <label><input type="checkbox" id="opt-ent" checked> <span data-i18n="step2.optEnt">Entitlements を自動抽出して適用する</span></label>
+      <label><input type="checkbox" id="opt-sign" checked> <span data-i18n="step2.optSign">再署名する</span></label>
     </div>
     <div class="row" id="row-bid" hidden>
       <label class="field">
-        <span>新しい Bundle ID</span>
-        <input type="text" id="new-bid" placeholder="com.example.app">
+        <span data-i18n="step2.newBidLabel">新しい Bundle ID</span>
+        <input type="text" id="new-bid" data-i18n-attr="placeholder:step2.newBidPlaceholder" placeholder="com.example.app">
       </label>
     </div>
   </section>
 
   <section class="card">
-    <h2>3. 実行</h2>
+    <h2 data-i18n="step3.heading">3. 実行</h2>
     <div class="actions">
-      <button id="btn-inspect" type="button" class="ghost">内容を確認</button>
-      <button id="btn-run" type="button" class="primary">処理を実行</button>
-      <a id="btn-download" class="primary download" hidden download>署名済み IPA をダウンロード</a>
+      <button id="btn-inspect" type="button" class="ghost" data-i18n="step3.inspect">内容を確認</button>
+      <button id="btn-run" type="button" class="primary" data-i18n="step3.run">処理を実行</button>
+      <a id="btn-download" class="primary download" hidden download data-i18n="step3.download">署名済み IPA をダウンロード</a>
     </div>
     <div class="progress" id="progress" hidden>
       <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
-      <div class="progress-text" id="progress-text">準備中...</div>
+      <div class="progress-text" id="progress-text" data-i18n="step3.preparing">準備中...</div>
     </div>
   </section>
 
   <section class="card">
-    <h2>ログ</h2>
+    <h2 data-i18n="log.heading">ログ</h2>
     <pre id="log" class="log" aria-live="polite"></pre>
     <div class="row">
-      <button id="btn-clear-log" type="button" class="ghost small">ログをクリア</button>
+      <button id="btn-clear-log" type="button" class="ghost small" data-i18n="log.clear">ログをクリア</button>
     </div>
   </section>
 
   <section class="card">
-    <h2>使い方とご注意</h2>
+    <h2 data-i18n="notes.heading">使い方とご注意</h2>
     <ul class="notes">
-      <li>このツールはブラウザ内のみで動作します。アップロードしたファイル・証明書・パスワードは外部サーバーへ送信されません。</li>
-      <li>有効な Apple Developer 証明書 (Development / Distribution) と一致する Provisioning Profile が必要です。</li>
-      <li>再署名した IPA を実機にインストールするには、デバイスの UDID が Provisioning Profile に登録されている必要があります。</li>
-      <li>FairPlay DRM で保護された App Store アプリ (暗号化された Mach-O) は再署名できません。</li>
-      <li>大きな IPA ではメモリ消費とブラウザの応答遅延に注意してください。デスクトップ Chrome / Edge での実行を推奨します。</li>
+      <li data-i18n="notes.item1">このツールはブラウザ内のみで動作します。アップロードしたファイル・証明書・パスワードは外部サーバーへ送信されません。</li>
+      <li data-i18n="notes.item2">有効な Apple Developer 証明書 (Development / Distribution) と一致する Provisioning Profile が必要です。</li>
+      <li data-i18n="notes.item3">再署名した IPA を実機にインストールするには、デバイスの UDID が Provisioning Profile に登録されている必要があります。</li>
+      <li data-i18n="notes.item4">FairPlay DRM で保護された App Store アプリ (暗号化された Mach-O) は再署名できません。</li>
+      <li data-i18n="notes.item5">大きな IPA ではメモリ消費とブラウザの応答遅延に注意してください。デスクトップ Chrome / Edge での実行を推奨します。</li>
     </ul>
   </section>
 
@@ -108,8 +114,8 @@
 <footer class="site-footer">
   <div class="container">
     <p>
-      <a href="https://github.com/" target="_blank" rel="noopener">ソース</a> ·
-      クライアントサイドのみで動作 · No data leaves your browser
+      <a href="https://github.com/" target="_blank" rel="noopener" data-i18n="footer.source">ソース</a> ·
+      <span data-i18n="footer.middle">クライアントサイドのみで動作 · No data leaves your browser</span>
     </p>
   </div>
 </footer>
@@ -123,6 +129,7 @@
         crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
 <!-- 自前モジュール -->
+<script src="js/i18n.js"></script>
 <script src="js/utils.js"></script>
 <script src="js/plist.js"></script>
 <script src="js/provisioning.js"></script>

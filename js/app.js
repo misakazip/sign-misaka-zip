@@ -2,6 +2,7 @@
 (function () {
   'use strict';
   const U = window.U;
+  const t = (k, p) => (window.I18N ? window.I18N.t(k, p) : k);
 
   // ── 状態 ─────────────────────────────────────────────────
   const state = {
@@ -41,18 +42,18 @@
 
   // ── 内容確認 ────────────────────────────────────────────
   btnInspect.addEventListener('click', async () => {
-    if (!state.ipaFile) { U.error('IPA ファイルを選択してください'); return; }
+    if (!state.ipaFile) { U.error(t('err.selectIpa')); return; }
     try {
-      U.setProgress(0, 'IPA を読み込み中...');
+      U.setProgress(0, t('prog.readingIpa'));
       const bytes = await U.readFileAsBytes(state.ipaFile);
-      U.setProgress(40, 'IPA を解凍中...');
+      U.setProgress(40, t('prog.unzipping'));
       const zip = await JSZip.loadAsync(bytes);
-      U.setProgress(80, '内容を解析中...');
+      U.setProgress(80, t('prog.parsing'));
       await window.Inspector.showIpaContents(zip);
-      U.setProgress(100, '完了');
+      U.setProgress(100, t('prog.done'));
       setTimeout(() => U.hideProgress(), 600);
     } catch (e) {
-      U.error('内容確認に失敗: ' + e.message);
+      U.error(t('err.inspectFailed', { msg: e.message }));
       console.error(e);
       U.hideProgress();
     }
@@ -70,7 +71,7 @@
     try {
       await runPipeline();
     } catch (e) {
-      U.error('処理中にエラー: ' + e.message);
+      U.error(t('err.processFailed', { msg: e.message }));
       console.error(e);
     } finally {
       btnRun.disabled = false;
@@ -78,7 +79,7 @@
   });
 
   async function runPipeline() {
-    if (!state.ipaFile) { U.error('IPA ファイルを選択してください'); return; }
+    if (!state.ipaFile) { U.error(t('err.selectIpa')); return; }
 
     const willSign = optSign.checked;
     const willReplacePP = optPP.checked;
@@ -87,31 +88,31 @@
     const willShow      = optShow.checked;
 
     if (willChangeBid && !newBidInput.value.trim()) {
-      U.error('新しい Bundle ID を入力してください'); return;
+      U.error(t('err.enterNewBid')); return;
     }
     if ((willReplacePP || willEnts) && !state.ppFile) {
-      U.error('Provisioning Profile (.mobileprovision) を選択してください'); return;
+      U.error(t('err.selectPP')); return;
     }
     if (willSign && !state.p12File) {
-      U.error('証明書 (.p12) を選択してください'); return;
+      U.error(t('err.selectP12')); return;
     }
 
     U.clearLog();
 
     // ── ファイル読込 ──────────────────────────────
-    U.setProgress(0, 'ファイル読み込み中...');
+    U.setProgress(0, t('prog.readingFiles'));
     const ipaBytes = await U.readFileAsBytes(state.ipaFile);
     const p12Bytes = state.p12File ? await U.readFileAsBytes(state.p12File) : null;
     const ppBytes  = state.ppFile  ? await U.readFileAsBytes(state.ppFile)  : null;
 
     // ── IPA 展開 ──────────────────────────────────
-    U.setProgress(8, 'IPA を解凍中...');
+    U.setProgress(8, t('prog.unzipping'));
     const zip = await JSZip.loadAsync(ipaBytes);
 
     // アプリパスを特定
     const appPath = window.Inspector.findAppPath(zip);
-    if (!appPath) throw new Error('Payload 内に .app が見つかりません');
-    U.info('アプリ: ' + appPath);
+    if (!appPath) throw new Error(t('err.appNotFound'));
+    U.info(t('info.app', { path: appPath }));
 
     // ── 内容確認 ──────────────────────────────────
     if (willShow) {
@@ -124,36 +125,38 @@
       try {
         ppData = window.PP.parseProvisioningProfile(ppBytes);
         const sum = window.PP.summary(ppData);
-        U.info('PP 名     : ' + sum.Name);
-        U.info('Team      : ' + sum.TeamName);
-        U.info('App ID    : ' + sum.AppID);
-        if (sum.Expiration) U.info('有効期限  : ' + sum.Expiration.toISOString().split('T')[0]);
+        U.info(t('info.ppName', { name: sum.Name }));
+        U.info(t('info.team',   { team: sum.TeamName }));
+        U.info(t('info.appId',  { id:   sum.AppID }));
+        if (sum.Expiration) {
+          U.info(t('info.expiration', { date: sum.Expiration.toISOString().split('T')[0] }));
+        }
       } catch (e) {
-        throw new Error('Provisioning Profile の解析に失敗: ' + e.message);
+        throw new Error(t('err.ppParseFailed', { msg: e.message }));
       }
     }
 
     // ── PKCS#12 解析 ───────────────────────────────
     let signer = null;
     if (willSign) {
-      U.setProgress(18, '証明書を読み込み中...');
+      U.setProgress(18, t('prog.readingCert'));
       try {
         signer = window.CMS.readPkcs12(p12Bytes, passInput.value || '');
-        U.info('署名 ID    : ' + (signer.leafCert.subject.getField('CN') || {}).value);
+        U.info(t('info.signId', { name: (signer.leafCert.subject.getField('CN') || {}).value }));
       } catch (e) {
-        throw new Error('証明書の読み込みに失敗: ' + e.message + ' (パスワードを確認してください)');
+        throw new Error(t('err.p12LoadFailed', { msg: e.message }));
       }
     }
 
     // ── Bundle ID 変更 ─────────────────────────────
     if (willChangeBid) {
-      U.setProgress(28, 'Bundle ID 変更中...');
+      U.setProgress(28, t('prog.changingBid'));
       await window.BundleID.changeBundleId(zip, appPath, newBidInput.value.trim());
     }
 
     // ── 署名 (PP 差し替え + Entitlements + バイナリ署名) ─
     if (willSign) {
-      U.setProgress(40, '再署名中...');
+      U.setProgress(40, t('prog.signing'));
       await window.Signer.signBundle(zip, appPath, signer, ppData, {
         replacePP: willReplacePP,
         ppBytes: willReplacePP ? ppBytes : null,
@@ -162,21 +165,21 @@
     } else {
       // 署名しないがプロファイル差し替えだけは行う場合
       if (willReplacePP && ppBytes) {
-        U.setProgress(45, 'Provisioning Profile 差し替え中...');
+        U.setProgress(45, t('prog.replacingPP'));
         zip.file(appPath + '/embedded.mobileprovision', ppBytes);
-        U.success('Provisioning Profile を差し替えました');
+        U.success(t('info.ppReplaced'));
       }
     }
 
     // ── 再 zip 化 ─────────────────────────────────
-    U.setProgress(80, 'IPA を再パッケージ中...');
+    U.setProgress(80, t('prog.repackaging'));
     const outBlob = await zip.generateAsync({
       type: 'blob',
       compression: 'DEFLATE',
       compressionOptions: { level: 6 },
     }, (meta) => {
       const p = 80 + Math.min(18, (meta.percent / 100) * 18);
-      U.setProgress(p, '再パッケージ中... ' + meta.percent.toFixed(0) + '%');
+      U.setProgress(p, t('prog.repackagingPct', { pct: meta.percent.toFixed(0) }));
     });
 
     // ── ダウンロードリンク作成 ───────────────────
@@ -187,8 +190,8 @@
     btnDl.download = U.sanitizeFilename(baseName + '_signed.ipa');
     btnDl.hidden = false;
 
-    U.setProgress(100, '完了');
-    U.success('処理が完了しました。「署名済み IPA をダウンロード」からダウンロードしてください。');
+    U.setProgress(100, t('prog.done'));
+    U.success(t('info.complete'));
     setTimeout(() => U.hideProgress(), 1200);
   }
 })();

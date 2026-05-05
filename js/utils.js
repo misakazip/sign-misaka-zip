@@ -156,7 +156,15 @@
     inputEl.addEventListener('change', () => {
       const f = inputEl.files && inputEl.files[0];
       const label = document.querySelector(`[data-target="${inputEl.id}"]`);
-      if (label) label.textContent = f ? f.name : '未選択';
+      if (label) {
+        if (f) {
+          label.textContent = f.name;
+          label.removeAttribute('data-i18n');
+        } else {
+          label.setAttribute('data-i18n', 'step1.notSelected');
+          label.textContent = (window.I18N ? window.I18N.t('step1.notSelected') : '未選択');
+        }
+      }
       if (f) callback(f);
     });
   }

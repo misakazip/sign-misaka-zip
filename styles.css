@@ -61,6 +61,40 @@ a:hover { text-decoration: underline; }
   font-size: 14px;
 }
 
+.header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.lang-switch {
+  display: inline-flex;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+}
+.lang-switch .lang-btn {
+  background: transparent;
+  color: var(--muted);
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.lang-switch .lang-btn:hover:not(.active) {
+  color: var(--text);
+}
+.lang-switch .lang-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+
 .card {
   background: var(--panel);
   border: 1px solid var(--border);

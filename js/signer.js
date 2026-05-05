@@ -73,7 +73,7 @@
       const linkeditEnd = parts.linkedit.fileoff + parts.linkedit.filesize;
       newSigOff = MachO.alignTo(Math.max(linkeditEnd, bytes.length), 16);
       needAddLC = true;
-      U.info('LC_CODE_SIGNATURE が無いため新規追加します');
+      U.info((global.I18N ? global.I18N.t('sign.lcAdded') : 'LC_CODE_SIGNATURE が無いため新規追加します'));
       // load commands エリアに 16 byte の余裕があるか検証
       const minSecOff = MachO.getMinSectionFileOff(thin);
       const newLcEnd = thin.headerSize + thin.sizeofcmds + 16;
@@ -203,7 +203,8 @@
         const newSlice = await signThin(sliceBytes, opts);
         signedSlices.push({ cputype: arch.cputype, cpusubtype: arch.cpusubtype, align: arch.align, bytes: newSlice });
       } catch (e) {
-        U.warn(`FAT スライス (cputype=${arch.cputype}) の署名に失敗: ${e.message}。スキップします。`);
+        U.warn(global.I18N ? global.I18N.t('sign.fatSliceFailed', { cputype: arch.cputype, msg: e.message })
+                           : `FAT スライス (cputype=${arch.cputype}) の署名に失敗: ${e.message}。スキップします。`);
       }
     }
     if (!signedSlices.length) throw new Error('全 FAT スライスの署名に失敗しました');
@@ -249,16 +250,18 @@
   //  バンドル (.app / .appex) 単位の署名
   // ============================================================
   async function signBundle(zip, bundlePath, signer, ppData, options) {
+    const t = (k, p) => (global.I18N ? global.I18N.t(k, p) : k);
     const isAppex = bundlePath.endsWith('.appex');
-    U.header((isAppex ? 'App Extension' : 'App') + ' 再署名: ' + bundlePath.split('/').pop());
+    const kindHeader = t(isAppex ? 'sign.kindAppExtension' : 'sign.kindApp');
+    U.header(t('sign.bundleHeader', { kind: kindHeader, name: bundlePath.split('/').pop() }));
 
     // ── Info.plist を読む ─────────────────────────
     const infoEntry = zip.file(bundlePath + '/Info.plist');
-    if (!infoEntry) throw new Error(bundlePath + '/Info.plist が見つかりません');
+    if (!infoEntry) throw new Error(t('err.infoPlistMissing', { path: bundlePath }));
     const infoBytes = await infoEntry.async('uint8array');
     const infoPlist = Plist.parse(infoBytes);
     const mainExe   = infoPlist.CFBundleExecutable;
-    if (!mainExe) throw new Error('CFBundleExecutable が Info.plist にありません');
+    if (!mainExe) throw new Error(t('err.cfBundleExeMissing'));
     const bundleId  = infoPlist.CFBundleIdentifier || '';
 
     // ── 1. ネスト Bundle (PlugIns/*.appex) 署名 ───
@@ -293,7 +296,7 @@
     }
 
     // ── 4. CodeResources 生成 ─────────────────────
-    U.info('CodeResources 生成中...');
+    U.info(t('sign.crBuilding'));
     const crBytes = await CR.buildCodeResources(zip, bundlePath, mainExe);
     zip.file(bundlePath + '/_CodeSignature/CodeResources', crBytes);
 
@@ -319,17 +322,19 @@
     });
     zip.file(binPath, newBin);
 
-    U.success((isAppex ? 'App Extension' : 'アプリ') + ' を再署名しました: ' + bundlePath.split('/').pop());
+    const kindSuccess = t(isAppex ? 'sign.kindAppExtension' : 'sign.kindAppShort');
+    U.success(t('sign.bundleSuccess', { kind: kindSuccess, name: bundlePath.split('/').pop() }));
   }
 
   /** 単独バイナリ (Frameworks/*.dylib) の署名 */
   async function signBinary(zip, path, signer, identifier, isMainExe, isAppex) {
+    const t = (k, p) => (global.I18N ? global.I18N.t(k, p) : k);
     const bytes = await zip.file(path).async('uint8array');
     if (!MachO.isMachO(bytes)) {
-      U.warn('Mach-O ではないためスキップ: ' + path);
+      U.warn(t('sign.notMachO', { path }));
       return;
     }
-    U.info('バイナリ署名: ' + path);
+    U.info(t('sign.binary', { path }));
     const newBytes = await signMachO(bytes, {
       signer,
       identifier,

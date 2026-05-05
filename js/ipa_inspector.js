@@ -27,22 +27,23 @@
   }
 
   async function showIpaContents(zip) {
-    U.header('IPA 内容確認');
+    const t = (k, p) => (global.I18N ? global.I18N.t(k, p) : k);
+    U.header(t('insp.heading'));
 
     const appPath = findAppPath(zip);
     if (!appPath) {
-      U.warn('Payload 内に .app が見つかりません');
+      U.warn(t('err.appNotFound'));
       return null;
     }
-    U.info('アプリ: ' + appPath.split('/').pop());
+    U.info(t('insp.appShort', { name: appPath.split('/').pop() }));
 
     // ── ファイル一覧 (上位 50) ────────────────────────
     const names = [];
     zip.forEach((relPath, entry) => { if (!entry.dir) names.push(relPath); });
     names.sort();
-    U.plain('ファイル一覧 (上位 50 件):');
+    U.plain(t('insp.fileList'));
     names.slice(0, 50).forEach(n => U.plain('  ' + n));
-    if (names.length > 50) U.plain('  ... 他 ' + (names.length - 50) + ' ファイル');
+    if (names.length > 50) U.plain(t('insp.moreFiles', { n: names.length - 50 }));
 
     // ── Info.plist ────────────────────────────────────
     const infoPath = appPath + '/Info.plist';
@@ -52,7 +53,7 @@
         const data = await infoEntry.async('uint8array');
         const plist = Plist.parse(data);
         U.plain('');
-        U.plain('Info.plist 主要項目:');
+        U.plain(t('insp.infoPlistTitle'));
         const fields = [
           ['Bundle ID',     'CFBundleIdentifier'],
           ['Version',       'CFBundleVersion'],
@@ -63,13 +64,13 @@
         ];
         for (const [label, key] of fields) {
           const v = plist[key];
-          U.plain('  ' + label.padEnd(16) + ': ' + (v == null ? '(なし)' : v));
+          U.plain('  ' + label.padEnd(16) + ': ' + (v == null ? t('val.none') : v));
         }
       } catch (e) {
-        U.warn('Info.plist の解析に失敗: ' + e.message);
+        U.warn(t('insp.infoPlistFailed', { msg: e.message }));
       }
     } else {
-      U.warn('Info.plist が見つかりません');
+      U.warn(t('insp.infoPlistMissing'));
     }
 
     // ── Provisioning Profile ──────────────────────────
@@ -81,16 +82,16 @@
         const ppData = PP.parseProvisioningProfile(ppBytes);
         const sum = PP.summary(ppData);
         U.plain('');
-        U.plain('Provisioning Profile:');
-        U.plain('  Name           : ' + sum.Name);
-        U.plain('  Team           : ' + sum.TeamName);
-        U.plain('  App ID         : ' + sum.AppID);
-        U.plain('  有効期限       : ' + (sum.Expiration ? sum.Expiration.toISOString().split('T')[0] : '(不明)'));
+        U.plain(t('insp.ppTitle'));
+        U.plain(t('insp.ppName',  { v: sum.Name }));
+        U.plain(t('insp.ppTeam',  { v: sum.TeamName }));
+        U.plain(t('insp.ppAppId', { v: sum.AppID }));
+        U.plain(t('insp.ppExp',   { v: sum.Expiration ? sum.Expiration.toISOString().split('T')[0] : t('val.unknown') }));
       } catch (e) {
-        U.warn('PP の解析に失敗: ' + e.message);
+        U.warn(t('insp.ppParseFailed', { msg: e.message }));
       }
     } else {
-      U.warn('embedded.mobileprovision が見つかりません');
+      U.warn(t('insp.ppMissing'));
     }
 
     return appPath;

@@ -14,18 +14,19 @@
    * @param {string} newBundleId
    */
   async function changeBundleId(zip, appPath, newBundleId) {
-    U.header('Bundle ID 変更');
+    const t = (k, p) => (window.I18N ? window.I18N.t(k, p) : k);
+    U.header(t('bid.heading'));
 
     const mainPlistPath = appPath + '/Info.plist';
     const mainBytes = await zip.file(mainPlistPath).async('uint8array');
     const mainPlist = Plist.parse(mainBytes);
     const oldBundleId = mainPlist.CFBundleIdentifier;
     if (!oldBundleId) {
-      U.warn('CFBundleIdentifier が見つかりません');
+      U.warn(t('bid.cfBidMissing'));
       return;
     }
-    U.info('変更前: ' + oldBundleId);
-    U.info('変更後: ' + newBundleId);
+    U.info(t('bid.before', { id: oldBundleId }));
+    U.info(t('bid.after',  { id: newBundleId }));
     mainPlist.CFBundleIdentifier = newBundleId;
     zip.file(mainPlistPath, Plist.build(mainPlist));
 
@@ -45,13 +46,13 @@
           const newExId = newBundleId + exId.substring(oldBundleId.length);
           exPlist.CFBundleIdentifier = newExId;
           zip.file(ex.path, Plist.build(exPlist));
-          U.info('  Extension: ' + exId + ' → ' + newExId);
+          U.info(t('bid.extChanged', { old: exId, new: newExId }));
         } else {
-          U.warn('  Extension の Bundle ID が一致しないためスキップ: ' + exId);
+          U.warn(t('bid.extSkipped', { id: exId }));
         }
       }
     }
-    U.success('Bundle ID を変更しました');
+    U.success(t('bid.success'));
   }
 
   function escapeRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
